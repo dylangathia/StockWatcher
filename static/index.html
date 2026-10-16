@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock Watcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/vendor/lightweight-charts.js"></script>
+  <script src="/static/vendor/chart.umd.min.js"></script>
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/purify.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M3 17l5-6 4 4 8-10" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Stock Watcher <span class="tag">NSE Kenya</span>
+  </a>
+  <nav class="tabs">
+    <a href="#/" data-tab="markets">Markets</a>
+    <a href="#/portfolio" data-tab="portfolio">Portfolio</a>
+  </nav>
+  <div id="indices" class="indices"></div>
+  <div id="mkt-status" class="mkt-status"></div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="search-wrap">
+      <input id="search" class="input" placeholder="Search NSE stocks…" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+      <div class="dropdown" hidden></div>
+    </div>
+    <div class="side-head">
+      <h3>Watchlist</h3>
+      <select id="watch-sort" class="select-sm" title="Sort watchlist">
+        <option value="none">Added</option>
+        <option value="day">Today %</option>
+        <option value="m1">1M %</option>
+        <option value="m2">2M %</option>
+        <option value="rsi">RSI</option>
+      </select>
+    </div>
+    <ul id="watchlist" class="watchlist"></ul>
+  </aside>
+
+  <main>
+    <!-- Markets: overview -->
+    <section id="view-overview" class="view">
+      <div class="page-head">
+        <div>
+          <h1>Watchlist performance</h1>
+          <p class="muted">How your watchlist has moved, rebased to 0% at the start of the period.</p>
+        </div>
+        <div class="seg" id="overview-period"></div>
+      </div>
+      <div class="card"><div id="compare-chart" class="chart-md"></div><div id="compare-legend" class="legend"></div></div>
+      <div class="card">
+        <table class="table" id="overview-table">
+          <thead><tr><th>Stock</th><th class="r">Price</th><th class="r">Today</th><th class="r">1M</th><th class="r">2M</th><th class="r">3M</th><th class="r">RSI</th><th>Trend</th><th>2M chart</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card ai-card">
+        <div class="ai-head"><h2><span class="spark-ic">✦</span> Ask AI</h2><span class="muted">Uses your portfolio and watchlist as context</span></div>
+        <form id="ask-form" class="ask">
+          <input id="ask-input" class="input" placeholder="e.g. Which of my watchlist stocks has the best dividend yield and momentum right now?" maxlength="1000">
+          <button class="btn primary">Ask</button>
+        </form>
+        <div id="ask-out" class="ai-out" hidden></div>
+      </div>
+    </section>
+
+    <!-- Markets: single stock -->
+    <section id="view-stock" class="view" hidden>
+      <div class="stock-head">
+        <div>
+          <div class="stock-title"><h1 id="s-name"></h1><span id="s-symbol" class="tag"></span><span id="s-sector" class="tag muted-tag" hidden></span></div>
+          <div class="price-row"><span id="s-price" class="price mono"></span><span id="s-change" class="chg mono"></span><span id="s-asof" class="muted small"></span></div>
+        </div>
+        <div class="actions">
+          <button id="btn-watch" class="btn"></button>
+          <button id="btn-buy" class="btn">+ Add to portfolio</button>
+          <button id="btn-ai" class="btn primary">✦ AI insight</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="chart-toolbar">
+          <div class="seg" id="stock-period"></div>
+          <div class="toggles">
+            <label><input type="checkbox" id="t-sma20" checked><span class="dot" style="--c:var(--sma20)"></span>SMA 20</label>
+            <label><input type="checkbox" id="t-sma50" checked><span class="dot" style="--c:var(--sma50)"></span>SMA 50</label>
+            <label><input type="checkbox" id="t-vol" checked><span class="dot" style="--c:var(--muted)"></span>Volume</label>
+          </div>
+          <div id="ohlc" class="ohlc mono"></div>
+        </div>
+        <div id="price-chart" class="chart-lg"></div>
+        <div class="rsi-label muted small">RSI 14</div>
+        <div id="rsi-chart" class="chart-sm"></div>
+        <p class="muted small note-line">Daily closing prices (no intraday open/high/low); volume is available for the last 10 sessions. Data updates once per trading day.</p>
+      </div>
+
+      <div id="position" class="card position" hidden></div>
+      <div id="stats" class="stats"></div>
+      <div id="about" class="card about" hidden></div>
+      <div id="stock-ai" class="card ai-card" hidden>
+        <div class="ai-head"><h2><span class="spark-ic">✦</span> AI insight</h2><span id="stock-ai-status" class="muted small"></span></div>
+        <div class="ai-out"></div>
+      </div>
+    </section>
+
+    <!-- Portfolio -->
+    <section id="view-portfolio" class="view" hidden>
+      <div class="page-head">
+        <div><h1>Portfolio</h1><p class="muted">Your holdings valued at the latest NSE closing prices, in KES.</p></div>
+        <div class="actions">
+          <button id="btn-add-lot" class="btn">+ Add holding</button>
+          <button id="btn-ai-pf" class="btn primary">✦ AI portfolio review</button>
+        </div>
+      </div>
+      <div id="pf-empty" class="card empty" hidden>
+        <h2>No holdings yet</h2>
+        <p class="muted">Add the stocks you own with quantity and buy price to see P&amp;L, allocation, risk and AI insights.</p>
+        <button class="btn primary" id="btn-add-first">+ Add your first holding</button>
+      </div>
+      <div id="pf-body">
+        <div id="pf-tiles" class="tiles"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h2>Allocation</h2><div class="seg" id="alloc-mode"></div></div>
+            <div class="alloc"><canvas id="alloc-chart"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h2>Risk</h2><span class="muted small">3-month daily data</span></div>
+            <div id="pf-risk" class="risk"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Holdings</h2><span class="muted small">Click a row to see its lots</span></div>
+          <div class="table-scroll">
+            <table class="table" id="pf-table">
+              <thead><tr><th>Stock</th><th class="r">Qty</th><th class="r">Avg cost</th><th class="r">LTP</th><th class="r">Value</th><th class="r">P&amp;L</th><th class="r">Today</th><th class="r">2M</th><th class="r">Yield</th><th class="r">Weight</th><th class="r">RSI</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pf-ai" class="card ai-card" hidden>
+          <div class="ai-head"><h2><span class="spark-ic">✦</span> AI portfolio review</h2><span id="pf-ai-status" class="muted small"></span></div>
+          <div class="ai-out"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="lot-dialog">
+  <form id="lot-form" method="dialog">
+    <h2 id="lot-title">Add holding</h2>
+    <label>Stock
+      <div class="search-wrap">
+        <input name="symbol" class="input" required autocomplete="off" placeholder="e.g. Safaricom or SCOM">
+        <div class="dropdown" hidden></div>
+      </div>
+    </label>
+    <div class="row-2">
+      <label>Quantity <input name="qty" class="input" type="number" min="0.0001" step="any" required></label>
+      <label>Buy price (KES) <input name="price" class="input" type="number" min="0.01" step="any" required></label>
+    </div>
+    <div class="row-2">
+      <label>Buy date <input name="date" class="input" type="date"></label>
+      <label>Note <input name="note" class="input" maxlength="200" placeholder="optional"></label>
+    </div>
+    <p id="lot-error" class="error" hidden></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="lot-cancel">Cancel</button>
+      <button type="submit" class="btn primary" id="lot-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
